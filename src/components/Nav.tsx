@@ -19,6 +19,7 @@ export function Nav() {
             <Link href="/dashboard" className="hide-mobile">Dashboard</Link>
             <Link href="/favorites" className="hide-mobile">Favorites</Link>
             <Link href="/assistant" className="hide-mobile">Assistant</Link>
+            <Link href="/admin" className="hide-mobile">Admin</Link>
           </>}
           <ThemeSwitcher/>
           {isLoaded && isSignedIn ? <UserButton/> : <Link className="nav-login" href="/sign-in"><LogIn size={15}/> Log in</Link>}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Nav } from "@/components/Nav";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { AdminDataManager } from "@/components/AdminDataManager";
 import { ensureDatabaseUser } from "@/lib/database-user";
 import { prisma } from "@/lib/prisma";
 
@@ -21,36 +22,14 @@ async function AdminContent() {
   await prisma.adminActivity.create({
     data: { action: "VIEW_ADMIN_OVERVIEW", details: { actorId: user.id } },
   });
-  const labels = [
-    ["Users", prisma.user.count()],
-    ["User profiles", prisma.userProfile.count()],
-    ["Craft categories", prisma.handicraftCategory.count()],
-    ["Handicrafts", prisma.handicraft.count()],
-    ["GI records", prisma.gIInformation.count()],
-    ["Reference images", prisma.referenceImage.count()],
-    ["Image embeddings", prisma.imageEmbedding.count()],
-    ["Scans", prisma.scan.count()],
-    ["Scan results", prisma.scanResult.count()],
-    ["Scan feedback", prisma.scanFeedback.count()],
-    ["Favorites", prisma.favorite.count()],
-    ["Conversations", prisma.chatConversation.count()],
-    ["Chat messages", prisma.chatMessage.count()],
-    ["Admin activities", prisma.adminActivity.count()],
-  ] as const;
-  const counts = await Promise.all(labels.map(([, count]) => count));
-
   return (
-      <>
-      <header className="page-head">
-        <span className="eyebrow">Administration</span>
-        <h1>Platform overview</h1>
-        <p className="section-lead">Read-only inventory of Karigar data. Sensitive records are available only to administrators.</p>
-      </header>
-      <div className="admin-model-grid">
-        {labels.map(([label], index) => <article className="admin-model-card" key={label}><span>{label}</span><strong>{counts[index]}</strong></article>)}
-      </div>
-      <p className="admin-note">Reference-image matching stays disabled until verified reference images and compatible embeddings are available.</p>
-      </>
+    <>
+      <AdminDataManager />
+      <p className="admin-note">
+        Reference-image matching stays disabled until verified reference images
+        and compatible embeddings are available.
+      </p>
+    </>
   );
 }
 

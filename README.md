@@ -8,12 +8,12 @@ Karigar is an educational handicraft discovery and visual-assessment application
 
 - **Explore crafts:** Search the sample catalog and filter by state. Craft detail pages describe regions, materials, techniques, and GI status.
 - **View GI information:** See place-based craft records and any available source links. The interface itself advises users to verify registration with official sources.
-- **Analyze an image:** Signed-in users can upload a JPEG, PNG, or WebP image. The browser prepares a smaller WebP image; the server validates the upload, stores it in Cloudinary, and asks Gemini for a visible-category assessment.
+- **Analyze an image:** Signed-in users can upload a JPEG, PNG, or WebP image. The browser prepares a smaller WebP image; the server validates the upload, stores it in Cloudinary, and asks Gemini for a visible-category assessment and a likely craft name or closest visual style.
 - **Review scan history:** See previous images and results, including failed analysis attempts, and submit helpful/not-helpful feedback.
 - **Save favorites:** Keep a personal collection of catalog crafts.
 - **Use the dashboard:** View scan and favorite counts and recent scans.
 - **Ask the craft assistant:** Ask general craft questions and keep conversations. This assistant currently uses simple, built-in topic-based responses; it is **not** a generative AI chat integration.
-- **Use administration:** Accounts with the `ADMIN` role can see read-only platform record counts. Viewing this page is recorded as admin activity.
+- **Manage database records:** Accounts with the `ADMIN` role can search, page through, inspect, create, update, and delete records in all 14 Prisma models. Changes are validated, relation/unique-key conflicts are reported, deletes require confirmation, and data changes are written to `AdminActivity`.
 - **Personalize the interface:** Switch dark mode and choose from seven color palettes. Analysis reports have a print-friendly layout that can be saved as PDF through the browser print dialog.
 
 The starter catalog includes Kashmiri Pashmina, Banarasi Saree, Phulkari, Jaipur Blue Pottery, and Madhubani Painting.
@@ -37,9 +37,9 @@ The starter catalog includes Kashmiri Pashmina, Banarasi Saree, Phulkari, Jaipur
 2. `POST /api/analyze` checks the image type and file signature, requires a signed-in Clerk user, and ensures that user's database record exists.
 3. The route uploads the image to the `karigar/scans` folder in Cloudinary and creates a scan record in PostgreSQL.
 4. The route sends the image and a constrained classification prompt to Gemini. It retries transient provider failures and can try a fallback model.
-5. On success, the category and result are saved and returned to the browser. If analysis fails after the scan is created, the scan is marked failed and the error is saved to scan history.
+5. On success, the broad category and result are saved and returned to the browser. Gemini also suggests a named craft when visual cues support it, or labels the closest plausible craft style as a visual resemblance. These suggestions are not verified identifications. If analysis fails after the scan is created, the scan is marked failed and the error is saved to scan history.
 
-The response contains a category, classification confidence, visible indicators, an explanation, the scan ID, and the stored image URL. `visualSimilarity` is always `null`: no verified reference-image comparison database or embeddings are currently configured. Gemini is asked to assess visible characteristics only; it cannot establish authenticity or provenance.
+The response contains a broad category, optional craft-name suggestion and match type, classification confidence, visible indicators, an explanation, the scan ID, and the stored image URL. `visualSimilarity` is always `null`: no verified reference-image comparison database or embeddings are currently configured. Gemini is asked to assess visible characteristics only; it cannot establish authenticity or provenance.
 
 ## Routes
 
@@ -56,7 +56,7 @@ The response contains a category, classification confidence, visible indicators,
 | `/dashboard` | Signed-in user's overview |
 | `/favorites` | Signed-in user's saved crafts |
 | `/assistant` | Craft Q&A and saved conversations |
-| `/admin` | Admin-only, read-only platform overview |
+| `/admin` | Admin-only CRUD console for all Prisma models |
 | `/sign-in`, `/sign-up` | Clerk authentication pages |
 
 ### API
@@ -71,6 +71,19 @@ The response contains a category, classification confidence, visible indicators,
 | `GET /api/chat` | Load saved conversations |
 | `POST /api/chat` | Add a user message and the built-in assistant response |
 | `POST /api/scans/{scanId}/feedback` | Save feedback for a scan belonging to the signed-in user |
+| `GET /api/admin/models` | Admin-only model registry and record counts |
+| `GET /api/admin/models/{model}` | Admin-only paginated and searchable record listing |
+| `POST /api/admin/models/{model}` | Admin-only record creation |
+| `PATCH /api/admin/models/{model}` | Admin-only record update |
+| `DELETE /api/admin/models/{model}` | Admin-only record deletion |
+
+### Admin data management
+
+The admin console covers `AdminActivity`, `ChatConversation`, `ChatMessage`, `Favorite`, `GIInformation`, `Handicraft`, `HandicraftCategory`, `ImageEmbedding`, `ReferenceImage`, `Scan`, `ScanFeedback`, `ScanResult`, `User`, and `UserProfile`. Each model has typed fields, JSON editors where needed, searchable/paginated lists, full record details, and create/edit/delete actions.
+
+All admin APIs check the signed-in user's database role. Foreign-key and unique-key errors are returned to the console rather than silently ignored. Deleting a record follows the relations configured in Prisma; the UI asks for confirmation first. Data changes are logged in `AdminActivity`. Admins cannot remove their own administrator role/account or remove the last administrator.
+
+`User` rows represent the application's database records, not Clerk identities. Creating or deleting a row in this console does not create or delete a Clerk account. A deleted Clerk user's database row may be recreated on their next authenticated request. To bootstrap the first administrator, sign in once, then use a trusted database client to set that account's `User.role` to `ADMIN`; do not expose this privilege through public signup.
 
 ## Database
 

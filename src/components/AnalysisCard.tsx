@@ -2,18 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { BadgeCheck, CircleHelp, Flower2, Gem, Sparkles } from "lucide-react";
-
-type AnalysisResult = {
-  status: string;
-  category: string;
-  classificationConfidence: number | null;
-  visualSimilarity: number | null;
-  matchingIndicators: string[];
-  uncertainIndicators: string[];
-  notice: string;
-  verificationStatus: string;
-  explanation: string;
-};
+import type { AnalysisResult } from "@/lib/analysis-result";
 
 const stages = ["Reading the image", "Finding visible details", "Preparing your craft notes"];
 
@@ -51,6 +40,8 @@ export function AnalysisCard({ result }: { result: AnalysisResult }) {
   }, []);
 
   const identified = result.status === "Category identified";
+  const craftMatch =
+    result.craftMatchType === "none" ? null : result.craftMatch;
 
   return (
     <div className={`analysis-result ${revealed ? "is-revealed" : ""}`}>
@@ -59,11 +50,22 @@ export function AnalysisCard({ result }: { result: AnalysisResult }) {
         {identified ? <BadgeCheck size={15}/> : <CircleHelp size={15}/>}
         {result.status}
       </span>
-      <p className="result-kicker">Karigar noticed</p>
-      <h2 className="result-category">{result.category}</h2>
+      <p className="result-kicker">
+        {craftMatch
+          ? result.craftMatchType === "similar_visual_style"
+            ? "Closest visual style"
+            : "Possible visual match"
+          : "Karigar noticed"}
+      </p>
+      <h2 className="result-category">{craftMatch || result.category}</h2>
+      {craftMatch && (
+        <p className="result-match-note">
+          Broad category: {result.category}. Visual resemblance only; not verified.
+        </p>
+      )}
       {result.classificationConfidence !== null && (
         <div className="confidence-line">
-          <div className="confidence-copy"><span>AI-estimated category confidence</span><strong>{result.classificationConfidence}%</strong></div>
+          <div className="confidence-copy"><span>AI-estimated broad-category confidence</span><strong>{result.classificationConfidence}%</strong></div>
           <div className="confidence-meter"><span style={{ width: `${result.classificationConfidence}%` }}/></div>
           <small>Estimate only · not independently calibrated</small>
         </div>

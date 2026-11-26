@@ -7,16 +7,11 @@ import {
   uploadScanImage,
 } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
-
-type GeminiAnalysis = {
-  status: "Category identified" | "Unable to Identify";
-  category: string;
-  classificationConfidence: number | null;
-  visualSimilarity: number | null;
-  matchingIndicators: string[];
-  uncertainIndicators: string[];
-  explanation: string;
-};
+import { crafts } from "@/data/crafts";
+import {
+  geminiAnalysisSchema,
+  type GeminiAnalysis,
+} from "@/lib/analysis-result";
 
 class GeminiProviderError extends Error {
   constructor(
@@ -41,13 +36,25 @@ async function analyzeWithGemini(file: File): Promise<GeminiAnalysis> {
   const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.8-flash";
   const bytes = await file.arrayBuffer();
   const base64 = Buffer.from(bytes).toString("base64");
+  const craftExamples = crafts
+    .map(
+      craft =>
+        `- ${craft.name}: ${craft.description} Visible techniques may include ${craft.techniques.join(", ")}.`,
+    )
+    .join("\n");
   const prompt = `You are a cautious visual handicraft assistant.
 Analyze only visible characteristics in this image.
-Do not claim authenticity, origin, manufacturing process, material, or provenance.
-Choose one category: Jewelry, Pashmina, Banarasi, Pottery, Phulkari, Blue Pottery, Other handicraft, Unknown / Not a handicraft.
+Do not claim authenticity, actual origin, manufacturing process, material composition, or provenance.
+Choose exactly one broad category: Textile, Embroidery, Pottery / Ceramics, Painting, Jewelry, Woodwork, Metalwork, Other handicraft, or Unknown / Not a handicraft.
+Do not use Other handicraft just because you cannot name the exact tradition. Also return a separate named craft suggestion:
+- Use likely_visual_match only when multiple distinctive visible cues support a specific named craft style.
+- If the exact craft cannot be identified but a related named style is visually plausible, return the closest style and use similar_visual_style.
+- Use none and null only when no specific or similar named style is supported. Never force a match or infer a place from color alone.
+The catalog below contains examples, not the only permitted answers:
+${craftExamples}
 Return only valid JSON in this exact shape:
-{"status":"Category identified|Unable to Identify","category":"...","classificationConfidence":number or null,"visualSimilarity":null,"matchingIndicators":["..."],"uncertainIndicators":["..."],"explanation":"..."}
-classificationConfidence must be a percentage integer from 0 to 100. Set status to Category identified when a recognizable object/craft category is visible, including Jewelry. Use Unable to Identify only when no category can reasonably be identified. Set visualSimilarity to null because this service has no verified reference-image comparison database. Do not treat category identification as authenticity verification.`;
+{"status":"Category identified|Unable to Identify","category":"broad category","craftMatch":"named craft or style, or null","craftMatchType":"likely_visual_match|similar_visual_style|none","classificationConfidence":number or null,"visualSimilarity":null,"matchingIndicators":["visible clue"],"uncertainIndicators":["uncertainty"],"explanation":"..."}
+Keep craftMatch to a short name. classificationConfidence is a percentage from 0 to 100 for the broad category, not proof of the named match. Set status to Category identified when a recognizable craft category is visible. Use Unable to Identify only when no craft category can reasonably be identified. Explain why a named style is a likely match or a visual resemblance, and make uncertainty clear. Set visualSimilarity to null because no verified reference-image comparison is configured.`;
 
   const body = JSON.stringify({
     contents: [
@@ -143,10 +150,17 @@ classificationConfidence must be a percentage integer from 0 to 100. Set status 
 
   const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   const jsonText = cleaned.match(/\{[\s\S]*\}/)?.[0];
-  let analysis: GeminiAnalysis;
+  if (!jsonText) {
+    console.error("Gemini returned an unreadable analysis", text.slice(0, 500));
+    throw new GeminiProviderError(
+      "Gemini returned an unreadable response. Please retry the image analysis.",
+      502,
+    );
+  }
+
+  let parsed: unknown;
   try {
-    if (!jsonText) throw new Error("No JSON object in response.");
-    analysis = JSON.parse(jsonText) as GeminiAnalysis;
+    parsed = JSON.parse(jsonText);
   } catch {
     console.error("Gemini returned an unreadable analysis", text.slice(0, 500));
     throw new GeminiProviderError(
@@ -155,17 +169,19 @@ classificationConfidence must be a percentage integer from 0 to 100. Set status 
     );
   }
 
-  if (
-    !analysis.category ||
-    !Array.isArray(analysis.matchingIndicators) ||
-    !Array.isArray(analysis.uncertainIndicators)
-  ) {
+  const parsedAnalysis = geminiAnalysisSchema.safeParse(parsed);
+  if (!parsedAnalysis.success) {
+    console.error(
+      "Gemini returned an incomplete analysis",
+      parsedAnalysis.error.issues,
+    );
     throw new GeminiProviderError(
       "Gemini returned incomplete analysis. Please retry the image analysis.",
       502,
     );
   }
 
+  const analysis: GeminiAnalysis = parsedAnalysis.data;
   const identifiable = !/^(unknown|unable|not a handicraft)/i.test(
     analysis.category.trim(),
   );
@@ -293,12 +309,16 @@ export async function POST(request: Request) {
       ],
     };
 
+    const storedCategory = analysis.craftMatch
+      ? `${analysis.craftMatchType === "similar_visual_style" ? "Similar style" : "Possible visual match"}: ${analysis.craftMatch}`
+      : analysis.category;
+
     await prisma.$transaction([
       prisma.scan.update({
         where: { id: scan.id },
         data: {
           status: analysis.status,
-          category: analysis.category,
+          category: storedCategory,
           score: null,
         },
       }),

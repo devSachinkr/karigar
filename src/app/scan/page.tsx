@@ -4,18 +4,7 @@ import { Camera, ImagePlus, LoaderCircle, RotateCcw, Sparkles, Upload } from "lu
 import { Nav } from "@/components/Nav";
 import { AnalysisCard, AnalysisLoadingCard } from "@/components/AnalysisCard";
 import Link from "next/link";
-
-type AnalysisResult = {
-  status:string;
-  category:string;
-  classificationConfidence:number|null;
-  visualSimilarity:number|null;
-  matchingIndicators:string[];
-  uncertainIndicators:string[];
-  notice:string;
-  verificationStatus:string;
-  explanation:string;
-};
+import type { AnalysisResult } from "@/lib/analysis-result";
 
 export default function ScanPage(){
   const inputRef=useRef<HTMLInputElement>(null);
