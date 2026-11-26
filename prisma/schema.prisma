@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String             @id @default(cuid())
+  clerkId       String             @unique
+  email         String             @unique
+  role          Role               @default(USER)
+  profile       UserProfile?
+  scans         Scan[]
+  favorites     Favorite[]
+  conversations ChatConversation[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model UserProfile {
+  id     String  @id @default(cuid())
+  userId String  @unique
+  name   String?
+  avatar String?
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model HandicraftCategory {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  handicrafts Handicraft[]
+}
+
+model Handicraft {
+  id          String             @id @default(cuid())
+  slug        String             @unique
+  name        String
+  description String?
+  state       String?
+  region      String?
+  categoryId  String
+  category    HandicraftCategory @relation(fields: [categoryId], references: [id])
+  gi          GIInformation?
+  references  ReferenceImage[]
+  favorites   Favorite[]
+  createdAt   DateTime           @default(now())
+}
+
+model GIInformation {
+  id           String     @id @default(cuid())
+  handicraftId String     @unique
+  status       String     @default("UNVERIFIED")
+  registration String?
+  origin       String?
+  history      String?
+  sourceUrl    String?
+  handicraft   Handicraft @relation(fields: [handicraftId], references: [id], onDelete: Cascade)
+}
+
+model ReferenceImage {
+  id           String          @id @default(cuid())
+  handicraftId String
+  url          String
+  description  String?
+  sourceUrl    String?
+  verified     Boolean         @default(false)
+  handicraft   Handicraft      @relation(fields: [handicraftId], references: [id], onDelete: Cascade)
+  embedding    ImageEmbedding?
+  createdAt    DateTime        @default(now())
+}
+
+model ImageEmbedding {
+  id          String         @id @default(cuid())
+  referenceId String         @unique
+  vector      Json
+  modelName   String
+  reference   ReferenceImage @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+}
+
+model Scan {
+  id        String         @id @default(cuid())
+  userId    String?
+  imageUrl  String
+  status    String
+  category  String?
+  score     Float?
+  createdAt DateTime       @default(now())
+  user      User?          @relation(fields: [userId], references: [clerkId], onDelete: SetNull)
+  result    ScanResult?
+  feedback  ScanFeedback[]
+}
+
+model ScanResult {
+  id     String @id @default(cuid())
+  scanId String @unique
+  result Json
+  scan   Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model ScanFeedback {
+  id      String  @id @default(cuid())
+  scanId  String
+  rating  String
+  comment String?
+  scan    Scan    @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model Favorite {
+  id           String     @id @default(cuid())
+  userId       String
+  handicraftId String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  handicraft   Handicraft @relation(fields: [handicraftId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, handicraftId])
+}
+
+model ChatConversation {
+  id        String        @id @default(cuid())
+  userId    String
+  title     String        @default("New conversation")
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime         @default(now())
+}
+
+model AdminActivity {
+  id        String   @id @default(cuid())
+  action    String
+  details   Json?
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  USER
+  ADMIN
+}
